@@ -135,12 +135,16 @@ def main():
         # Skip the human-approval step so runs don't hang on tool calls.
         mcp_tool.set_approval_mode("never")
 
+        # Merge tool_resources so the agent has both FileSearch's vector store
+        # AND MCP's per-server config (incl. approval-mode=never) baked in.
+        merged_resources = {**file_search.resources, **mcp_tool.resources}
+
         agent = project_client.agents.create_agent(
             model=MODEL_DEPLOYMENT,
             name=AGENT_NAME,
             instructions=INSTRUCTIONS_TEMPLATE.format(user_id=CONTOSO_USER_ID),
             tools=file_search.definitions + mcp_tool.definitions,
-            tool_resources=file_search.resources,
+            tool_resources=merged_resources,
         )
         print(f"✅ Agent created: {agent.id}")
         print(f"🔗 MCP server attached: {MCP_SERVER_URL}")
@@ -163,12 +167,9 @@ def main():
             project_client.agents.messages.create(
                 thread_id=thread.id, role="user", content=user_input
             )
-            # Pass MCP resources at run time — that's where the approval-mode
-            # and any per-run headers live in this SDK.
             run = project_client.agents.runs.create_and_process(
                 thread_id=thread.id,
                 agent_id=agent.id,
-                tool_resources=mcp_tool.resources,
             )
             if run.status == "failed":
                 print(f"❌ Run failed: {run.last_error}\n")
